@@ -14,7 +14,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=your_aws_access_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
-AWS_S3_BUCKET=your-bucket-name
+AWS_BUCKET_NAME=your-bucket-name
 ```
 
 ### NextAuth Configuration
@@ -52,7 +52,7 @@ The application includes fallback functionality:
 ## Troubleshooting
 
 ### Common Issues
-- **"No value provided for input HTTP label: Bucket"**: Check AWS_S3_BUCKET is set
+- **"No value provided for input HTTP label: Bucket"**: Check AWS_BUCKET_NAME is set
 - **"OpenAI API key is not configured"**: Check OPENAI_API_KEY is set
 - **"Missing S3 configuration"**: Ensure all AWS_* variables are set
 

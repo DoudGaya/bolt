@@ -3,7 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 // Validate environment variables
 const validateS3Config = () => {
-  const required = ['AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_S3_BUCKET']
+  const required = ['AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_BUCKET_NAME']
   const missing = required.filter(key => !process.env[key])
   
   if (missing.length > 0) {
@@ -12,7 +12,7 @@ const validateS3Config = () => {
   }
   
   console.log('S3 configuration validated successfully')
-  console.log('S3 Bucket:', process.env.AWS_S3_BUCKET)
+  console.log('S3 Bucket:', process.env.AWS_BUCKET_NAME)
   console.log('AWS Region:', process.env.AWS_REGION)
 }
 
@@ -35,16 +35,16 @@ export class S3Service {
       validateS3Config()
       
       const command = new PutObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET!,
+        Bucket: process.env.AWS_BUCKET_NAME!,
         Key: key,
         Body: body,
         ContentType: contentType,
       })
 
-      console.log('Uploading to S3:', { bucket: process.env.AWS_S3_BUCKET, key, contentType })
+      console.log('Uploading to S3:', { bucket: process.env.AWS_BUCKET_NAME, key, contentType })
       await s3Client.send(command)
       
-      const url = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
+      const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
       console.log('S3 upload successful:', url)
       return url
     } catch (error) {
@@ -58,7 +58,7 @@ export class S3Service {
       validateS3Config()
       
       const command = new GetObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET!,
+        Bucket: process.env.AWS_BUCKET_NAME!,
         Key: key,
       })
 
@@ -74,7 +74,7 @@ export class S3Service {
       validateS3Config()
       
       const command = new DeleteObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET!,
+        Bucket: process.env.AWS_BUCKET_NAME!,
         Key: key,
       })
 

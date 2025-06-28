@@ -49,7 +49,6 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { generateAdvancedContent, type AdvancedContentGenerationInput } from '@/actions/content-generation'
-import { ConfigValidator } from '@/lib/config'
 
 // Professional content type definitions with enterprise-grade categories
 const professionalContentTypes = {
@@ -258,16 +257,24 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
 
   // Check configuration on component mount
   useEffect(() => {
-    const checkConfig = () => {
-      const openaiConfigured = ConfigValidator.isOpenAIConfigured()
-      const s3Configured = ConfigValidator.isS3Configured()
-      const message = ConfigValidator.getConfigStatus()
-      
-      setConfigStatus({
-        openai: openaiConfigured,
-        s3: s3Configured,
-        message
-      })
+    const checkConfig = async () => {
+      try {
+        const response = await fetch('/api/config-status')
+        const data = await response.json()
+        
+        setConfigStatus({
+          openai: data.openai,
+          s3: data.s3,
+          message: data.message
+        })
+      } catch (error) {
+        console.error('Failed to check configuration:', error)
+        setConfigStatus({
+          openai: false,
+          s3: false,
+          message: 'Configuration check failed'
+        })
+      }
     }
     
     checkConfig()
@@ -459,6 +466,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
       <AnimatePresence>
         {!configStatus.openai && (
           <motion.div
+            key="openai-config-warning"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -543,6 +551,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
       <AnimatePresence>
         {isGenerating && (
           <motion.div
+            key="generation-progress"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -636,6 +645,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
           <AnimatePresence>
             {selectedType && (
               <motion.div
+                key={`subcategory-selection-${selectedType}`}
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -704,6 +714,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
           <AnimatePresence>
             {selectedSubtype && (
               <motion.div
+                key={`content-strategy-${selectedSubtype}`}
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -755,7 +766,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
                           <div className="grid gap-3">
                             {currentSuggestions.map((suggestion, index) => (
                               <motion.div
-                                key={index}
+                                key={`suggestion-${selectedType}-${index}-${(suggestion || '').slice(0, 20).replace(/\s+/g, '-') || 'empty'}`}
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: index * 0.1 }}
@@ -898,7 +909,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
                           {watchedKeyMessages && watchedKeyMessages.length > 0 && (
                             <div className="flex flex-wrap gap-2">
                               {watchedKeyMessages.map((message, index) => (
-                                <Badge key={index} variant="secondary" className="pr-1">
+                                <Badge key={`key-message-${index}-${(message || '').slice(0, 15).replace(/\s+/g, '-').toLowerCase() || 'empty'}`} variant="secondary" className="pr-1">
                                   {message}
                                   <button
                                     type="button"
@@ -949,6 +960,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
           <AnimatePresence>
             {selectedSubtype && (
               <motion.div
+                key={`format-options-${selectedSubtype}`}
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -1166,6 +1178,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
           <AnimatePresence>
             {selectedSubtype && (
               <motion.div
+                key={`advanced-optimization-${selectedSubtype}`}
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -1197,6 +1210,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
                   <AnimatePresence>
                     {showAdvanced && (
                       <motion.div
+                        key="advanced-seo-options"
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
@@ -1227,7 +1241,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
                                 {watchedSeoKeywords && watchedSeoKeywords.length > 0 && (
                                   <div className="flex flex-wrap gap-2">
                                     {watchedSeoKeywords.map((keyword, index) => (
-                                      <Badge key={index} variant="outline" className="pr-1">
+                                      <Badge key={`seo-keyword-${index}-${(keyword || '').slice(0, 10).replace(/\s+/g, '-') || 'empty'}`} variant="outline" className="pr-1">
                                         {keyword}
                                         <button
                                           type="button"
@@ -1351,6 +1365,7 @@ export function ProfessionalContentGenerationForm({ project }: ProfessionalConte
           <AnimatePresence>
             {selectedSubtype && (
               <motion.div
+                key={`generation-controls-${selectedSubtype}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.4 }}
