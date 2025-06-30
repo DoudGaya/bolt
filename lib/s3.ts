@@ -1,5 +1,6 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { Readable } from 'stream'
 
 // Validate environment variables
 const validateS3Config = () => {
@@ -50,6 +51,34 @@ export class S3Service {
     } catch (error) {
       console.error('S3 upload error:', error)
       throw new Error(`Failed to upload file to S3: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  static async uploadStream(
+    key: string,
+    stream: Readable,
+    contentType: string
+  ): Promise<string> {
+    try {
+      // Validate configuration before attempting upload
+      validateS3Config()
+      
+      const command = new PutObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME!,
+        Key: key,
+        Body: stream,
+        ContentType: contentType,
+      })
+
+      console.log('Uploading stream to S3:', { bucket: process.env.AWS_BUCKET_NAME, key, contentType })
+      await s3Client.send(command)
+      
+      const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
+      console.log('S3 stream upload successful:', url)
+      return url
+    } catch (error) {
+      console.error('S3 stream upload error:', error)
+      throw new Error(`Failed to upload stream to S3: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 

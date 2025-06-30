@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { S3Service } from './s3'
 import { PromptEngine } from '../actions/prompts'
 import { ConfigValidator, FallbackService } from './config'
+import { VideoGenerationService } from './video-services'
 
 // Initialize AI service providers
 const openai = new OpenAI({
@@ -485,8 +486,10 @@ Image specifications:
     const startTime = Date.now()
     
     try {
-      // Generate comprehensive video prompt
-      const prompt = PromptEngine.generateVideoPrompt({
+      console.log('Starting video content generation for:', params.videoType)
+
+      // Generate comprehensive video script first
+      const scriptPrompt = PromptEngine.generateVideoPrompt({
         videoType: params.videoType,
         brandName: params.brandContext.brandName,
         productDescription: params.brandContext.productDescription,
@@ -500,49 +503,171 @@ Image specifications:
         brandPersonality: params.brandContext.brandPersonality
       })
 
-      const completion = await openai.chat.completions.create({
+      const scriptCompletion = await openai.chat.completions.create({
         model: 'gpt-4-turbo-preview',
         messages: [
           { 
             role: 'system', 
-            content: 'You are an expert video producer and marketing strategist. Create comprehensive video content that maximizes engagement and drives conversions.'
+            content: 'You are an expert video producer and marketing strategist. Create comprehensive video scripts that include visual descriptions, narration, timing, and production notes. Format your response as a detailed markdown document with sections for: Overview, Script, Visual Guidelines, Technical Specifications, and Production Notes.'
           },
-          { role: 'user', content: prompt }
+          { role: 'user', content: scriptPrompt }
         ],
-        max_tokens: 2500,
+        max_tokens: 3000,
         temperature: 0.7,
       })
 
-      const videoContent = completion.choices[0]?.message?.content || ''
+      const videoScript = scriptCompletion.choices[0]?.message?.content || ''
 
-      // Save comprehensive video guide to S3
-      const fileName = `video-scripts/${params.brandContext.brandName.toLowerCase().replace(/\s+/g, '-')}/${params.videoType.toLowerCase().replace(/\s+/g, '-')}/${Date.now()}.md`
-      const s3Url = await S3Service.uploadFile(
-        fileName,
-        videoContent,
-        'text/markdown'
-      )
+      // Now generate an actual video using the new video service
+      try {
+        console.log('Attempting to generate actual video using AI services...')
+        
+        const videoResult = await VideoGenerationService.generateVideo({
+          script: videoScript,
+          duration: params.videoRequirements.duration || '30 seconds',
+          voiceId: 'en-US-JennyNeural',
+          style: params.brandContext.toneStyle || 'professional',
+          brandName: params.brandContext.brandName,
+          videoType: params.videoType
+        })
 
-      const processingTime = Date.now() - startTime
+        console.log('Real video generation completed successfully')
 
+        const processingTime = Date.now() - startTime
+
+        return {
+          content: `Video generated successfully!\n\nVideo URL: ${videoResult.videoUrl}\n\n---\n\n## Production Script\n\n${videoScript}`,
+          metadata: {
+            processingTime,
+            optimizationNotes: [
+              'Real video file generated using AI',
+              'Professional production quality',
+              'Platform-optimized format',
+              'Engagement-maximized content',
+              'Complete production script included'
+            ]
+          },
+          s3Url: videoResult.s3Url,
+          fileName: videoResult.fileName
+        }
+
+      } catch (videoError) {
+        console.log('Real video generation failed, falling back to script-only:', videoError)
+        
+        // Save the script to S3 as fallback
+        const scriptFileName = `video-scripts/${params.brandContext.brandName.toLowerCase().replace(/\s+/g, '-')}/${params.videoType.toLowerCase().replace(/\s+/g, '-')}/${Date.now()}.md`
+        const scriptS3Url = await S3Service.uploadFile(
+          scriptFileName,
+          videoScript,
+          'text/markdown'
+        )
+
+        const processingTime = Date.now() - startTime
+
+        return {
+          content: videoScript,
+          metadata: {
+            processingTime,
+            optimizationNotes: [
+              'Complete production-ready script',
+              'Platform-specific optimization', 
+              'Engagement-maximized structure',
+              'Professional production guidelines',
+              'Ready for video production services'
+            ]
+          },
+          s3Url: scriptS3Url,
+          fileName: scriptFileName
+        }
+      }
+
+    } catch (error) {
+      console.error('Video generation error:', error)
+      
+      // Fallback video script generation
+      return await this.generateFallbackVideo(params)
+    }
+  }
+
+  /**
+   * Fallback video script generation when API fails
+   */
+  private static async generateFallbackVideo(params: AdvancedVideoGenerationParams): Promise<ContentGenerationResult> {
+    console.log('Using fallback video script generation')
+    
+    const fallbackScript = `# ${params.videoType} Script for ${params.brandContext.brandName}
+
+## Video Overview
+- **Duration**: ${params.videoRequirements.duration || '60 seconds'}
+- **Platform**: ${params.videoRequirements.platform || 'Social Media'}
+- **Target Audience**: ${params.brandContext.targetAudience}
+- **Goal**: ${params.videoRequirements.goal}
+
+## Script
+
+**[OPENING - 0:00-0:05]**
+*Visual: Brand logo animation with modern background*
+*Audio: Upbeat, professional music*
+
+**Narrator**: "Introducing ${params.brandContext.brandName} - ${params.brandContext.productDescription.substring(0, 100)}..."
+
+**[MAIN CONTENT - 0:05-0:45]**
+*Visual: Product demonstration/key features*
+*Audio: Clear narration with background music*
+
+${params.videoRequirements.keyMessages?.map((message, index) => 
+  `**Key Point ${index + 1}**: ${message}`
+).join('\n\n') || '**Key Point**: Professional marketing content that drives results.'}
+
+**[CALL TO ACTION - 0:45-0:60]**
+*Visual: Contact information/website*
+*Audio: Strong, clear call to action*
+
+**Narrator**: "${params.videoRequirements.callToAction || 'Visit our website to learn more!'}"
+
+## Production Notes
+- Use professional lighting and high-quality audio
+- Brand colors: Primary and secondary brand palette
+- Style: ${params.brandContext.toneStyle}
+- Include captions for accessibility
+- Optimize for ${params.videoRequirements.platform || 'social media'} platform requirements
+
+## Technical Specifications
+- Resolution: 1920x1080 (1080p)
+- Frame Rate: 30fps
+- Audio: 44.1kHz, stereo
+- Format: MP4 (H.264)
+- Duration: ${params.videoRequirements.duration || '60 seconds'}
+
+*Note: This is a production-ready script. For actual video generation, consider using professional video production services or AI video generation platforms.*`
+
+    const fileName = `video-scripts/fallback/${Date.now()}.md`
+    
+    try {
+      const s3Url = await S3Service.uploadFile(fileName, fallbackScript, 'text/markdown')
+      
       return {
-        content: videoContent,
+        content: fallbackScript,
         metadata: {
-          processingTime,
+          processingTime: 1000,
           optimizationNotes: [
-            'Complete production-ready script',
-            'Platform-specific optimization',
-            'Engagement-maximized structure',
-            'Professional production guidelines'
+            'Fallback script generated',
+            'Production-ready format',
+            'Platform considerations included'
           ]
         },
         s3Url,
         fileName
       }
-
-    } catch (error) {
-      console.error('Video generation error:', error)
-      throw new Error('Failed to generate video content. Please try again.')
+    } catch (s3Error) {
+      console.error('S3 upload failed, returning content only:', s3Error)
+      return {
+        content: fallbackScript,
+        metadata: {
+          processingTime: 1000,
+          optimizationNotes: ['Fallback script - S3 upload failed']
+        }
+      }
     }
   }
 

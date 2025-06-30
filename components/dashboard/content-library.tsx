@@ -24,10 +24,22 @@ import {
   Star,
   Clock,
   Tag,
-  ExternalLink
+  ExternalLink,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize,
+  X,
+  AlertTriangle
 } from 'lucide-react'
 import { format } from 'date-fns'
 import Image from 'next/image'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { ContentPreviewModal } from './content-preview-modal'
+import { deleteGeneratedContent } from '@/actions/content-management'
+import { useToast } from '@/hooks/use-toast'
 
 interface ContentLibraryProps {
   projects: any[]
@@ -54,6 +66,11 @@ export function ContentLibrary({ projects, generatedContent }: ContentLibraryPro
   const [selectedProject, setSelectedProject] = useState<string>('all')
   const [sortBy, setSortBy] = useState<string>('newest')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [selectedContent, setSelectedContent] = useState<any>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [deleteConfirmContent, setDeleteConfirmContent] = useState<any>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const { toast } = useToast()
 
   const filteredContent = useMemo(() => {
     let filtered = generatedContent
@@ -98,7 +115,50 @@ export function ContentLibrary({ projects, generatedContent }: ContentLibraryPro
 
   const handleCopyContent = async (content: string) => {
     await navigator.clipboard.writeText(content)
-    // toast('Content copied to clipboard!')
+    toast({
+      title: "Copied!",
+      description: "Content copied to clipboard",
+    })
+  }
+
+  const handleDeleteContent = async (content: any) => {
+    setIsDeleting(true)
+    try {
+      const result = await deleteGeneratedContent(content.id)
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message,
+        })
+        // The page will refresh due to revalidatePath
+        window.location.reload()
+      } else {
+        toast({
+          title: "Error", 
+          description: result.message,
+          variant: "destructive"
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete content",
+        variant: "destructive"
+      })
+    } finally {
+      setIsDeleting(false)
+      setDeleteConfirmContent(null)
+    }
+  }
+
+  const openPreviewModal = (content: any) => {
+    setSelectedContent(content)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedContent(null)
   }
 
   const ContentCard = ({ content }: { content: any }) => {
@@ -113,124 +173,141 @@ export function ContentLibrary({ projects, generatedContent }: ContentLibraryPro
         exit={{ opacity: 0, scale: 0.9 }}
         transition={{ duration: 0.2 }}
       >
-        <Card className="h-full hover:shadow-lg transition-all duration-300 border-0 shadow-md">
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-2">
-                <div className={`p-2 rounded-lg ${typeColor}`}>
-                  <IconComponent className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm truncate">{content.title}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {content.project.productName}
-                  </p>
-                </div>
+        <Card className="h-full hover:shadow-xl transition-all duration-300 border-0 shadow-md overflow-hidden group cursor-pointer"
+              onClick={() => openPreviewModal(content)}>
+          {/* Content Preview - fills most of the card */}
+          <div className="relative h-64 overflow-hidden">
+            {/* Type icon overlay */}
+            <div className="absolute top-3 left-3 z-10">
+              <div className={`p-2 rounded-lg backdrop-blur-sm ${typeColor.replace('bg-', 'bg-opacity-90 bg-')}`}>
+                <IconComponent className="h-5 w-5" />
               </div>
-              <Badge variant="outline" className="text-xs">
+            </div>
+
+            {/* Badge overlay */}
+            <div className="absolute top-3 right-3 z-10">
+              <Badge variant="secondary" className="backdrop-blur-sm bg-white/90">
                 {content.type}
               </Badge>
             </div>
-          </CardHeader>
 
-          <CardContent className="pt-0">
             {/* Content Preview */}
-            <div className="mb-4">
-              {content.type === 'IMAGE' && content.fileUrl ? (
-                <div className="relative w-full h-32 rounded-lg overflow-hidden bg-gray-100">
-                  <Image
-                    src={content.fileUrl}
-                    alt={content.title}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  />
+            {content.type === 'IMAGE' && content.fileUrl ? (
+              <div className="relative w-full h-full bg-gray-100">
+                <Image
+                  src={content.fileUrl}
+                  alt={content.title}
+                  fill
+                  className="object-cover group-hover:scale-105 transition-transform duration-300"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                />
+              </div>
+            ) : content.type === 'VIDEO' ? (
+              <div className="relative w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+                <div className="text-center text-white">
+                  <Play className="h-12 w-12 mx-auto mb-3 opacity-80" />
+                  <p className="text-sm font-medium">Video Content</p>
+                  <p className="text-xs opacity-70 mt-1">Click to preview</p>
                 </div>
-              ) : content.type === 'VIDEO' ? (
-                <div className="relative w-full h-32 rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
-                  <Video className="h-8 w-8 text-white" />
-                  <span className="text-white text-sm ml-2">Video Content</span>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+              </div>
+            ) : content.type === 'AUDIO' ? (
+              <div className="relative w-full h-full bg-gradient-to-br from-purple-400 via-pink-400 to-red-400 flex items-center justify-center">
+                <div className="text-center text-white">
+                  <Music className="h-12 w-12 mx-auto mb-3 opacity-90" />
+                  <p className="text-sm font-medium">Audio Content</p>
+                  <p className="text-xs opacity-80 mt-1">Click to play</p>
                 </div>
-              ) : content.type === 'AUDIO' ? (
-                <div className="relative w-full h-32 rounded-lg overflow-hidden bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
-                  <Music className="h-8 w-8 text-white" />
-                  <span className="text-white text-sm ml-2">Audio Content</span>
+                {/* Animated audio waves with stable heights */}
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-1">
+                  {[24, 32, 28, 36, 30].map((height, i) => (
+                    <div
+                      key={i}
+                      className="w-1 bg-white/60 rounded-full animate-pulse"
+                      style={{
+                        height: `${height}px`,
+                        animationDelay: `${i * 200}ms`
+                      }}
+                    />
+                  ))}
                 </div>
-              ) : (
-                <div className="bg-gray-50 rounded-lg p-3 h-32 overflow-hidden">
-                  <p className="text-sm text-gray-700 line-clamp-5">
-                    {content.content?.substring(0, 150)}...
-                  </p>
+              </div>
+            ) : (
+              <div className="relative w-full h-full bg-gradient-to-br from-blue-50 to-indigo-100 p-4 overflow-hidden">
+                <div className="h-full overflow-hidden">
+                  <div className="text-gray-700 text-sm leading-relaxed line-clamp-8">
+                    {content.content?.substring(0, 300).split('\n').map((line: string, index: number) => (
+                      <p key={index} className="mb-1">{line}</p>
+                    ))}
+                    {content.content?.length > 300 && (
+                      <p className="text-gray-500 font-medium">...</p>
+                    )}
+                  </div>
                 </div>
-              )}
+                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-blue-50 to-transparent" />
+              </div>
+            )}
+
+            {/* Hover overlay */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-300 flex items-center justify-center">
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="bg-white/90 backdrop-blur-sm p-3 rounded-full">
+                  <Eye className="h-6 w-6 text-gray-700" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card Footer */}
+          <CardContent className="p-4 space-y-3">
+            <div>
+              <h3 className="font-semibold text-lg line-clamp-1 mb-1">{content.title}</h3>
+              <p className="text-sm text-muted-foreground line-clamp-1">
+                {content.project.productName}
+              </p>
             </div>
 
             {/* Metadata */}
-            <div className="space-y-2 text-xs text-muted-foreground">
-              <div className="flex items-center space-x-4">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-1">
                   <Clock className="h-3 w-3" />
-                  <span>{format(new Date(content.createdAt), 'MMM d, yyyy')}</span>
+                  <span>{format(new Date(content.createdAt), 'MMM d')}</span>
                 </div>
                 {content.metadata?.platform && (
                   <div className="flex items-center space-x-1">
                     <Tag className="h-3 w-3" />
-                    <span>{content.metadata.platform}</span>
+                    <span className="truncate max-w-16">{content.metadata.platform}</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Actions */}
-            <Separator className="my-4" />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-3xl">
-                    <DialogHeader>
-                      <DialogTitle>{content.title}</DialogTitle>
-                      <DialogDescription>
-                        Generated on {format(new Date(content.createdAt), 'MMMM d, yyyy')}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      {content.type === 'IMAGE' && content.fileUrl ? (
-                        <div className="relative w-full h-96 rounded-lg overflow-hidden">
-                          <Image
-                            src={content.fileUrl}
-                            alt={content.title}
-                            fill
-                            className="object-contain"
-                            sizes="100vw"
-                          />
-                        </div>
-                      ) : (
-                        <div className="whitespace-pre-wrap text-sm">
-                          {content.content}
-                        </div>
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-
+            {/* Quick Actions */}
+            <div className="flex items-center justify-between pt-2 border-t">
+              <div className="flex items-center space-x-1">
                 {content.content && (
                   <Button 
                     variant="ghost" 
                     size="sm" 
                     className="h-8 w-8 p-0"
-                    onClick={() => handleCopyContent(content.content)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCopyContent(content.content)
+                    }}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
                 )}
 
                 {content.fileUrl && (
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 w-8 p-0" 
+                    asChild
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <a href={content.fileUrl} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="h-4 w-4" />
                     </a>
@@ -238,11 +315,24 @@ export function ContentLibrary({ projects, generatedContent }: ContentLibraryPro
                 )}
               </div>
 
-              <div className="flex items-center space-x-2">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <div className="flex items-center space-x-1">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Edit className="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDeleteConfirmContent(content)
+                  }}
+                >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -329,7 +419,7 @@ export function ContentLibrary({ projects, generatedContent }: ContentLibraryPro
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              className="grid grid-cols-1 lg:grid-cols-2 gap-8"
             >
               {filteredContent.map((content) => (
                 <ContentCard key={content.id} content={content} />
@@ -350,6 +440,46 @@ export function ContentLibrary({ projects, generatedContent }: ContentLibraryPro
           )}
         </AnimatePresence>
       </div>
+
+      {/* Content Preview Modal */}
+      {selectedContent && (
+        <ContentPreviewModal
+          content={selectedContent}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmContent} onOpenChange={() => setDeleteConfirmContent(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              <span>Delete Content</span>
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deleteConfirmContent?.title}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end space-x-2 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setDeleteConfirmContent(null)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => deleteConfirmContent && handleDeleteContent(deleteConfirmContent)}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
